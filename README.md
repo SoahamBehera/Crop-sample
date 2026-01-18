@@ -219,6 +219,17 @@ We welcome contributions to make CultivaSense even better!
 - 🚜 **IoT Integration** - Smart sensor connectivity
 - 🎯 **Precision Farming** - GPS-guided recommendations
 
+## 📄 Project Documentation
+
+The project report and additional documentation can be found in the `project_report/` directory.
+
+To upload your project report:
+1. Place your report files (PDF, DOCX, etc.) in the `project_report/` folder.
+2. Commit and push the changes to the repository.
+
+[📂 View Project Report Folder](project_report/)
+
+
 ---
 
 ## 📈 Statistics
