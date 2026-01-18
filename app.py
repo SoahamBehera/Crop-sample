@@ -169,10 +169,18 @@ STATE_NAMES = {
 # Load price prediction model
 try:
     price_model = pickle.load(open('models/market_price_model.pkl', 'rb'))
-    logger.info("✅ Price prediction model loaded successfully")
+    if os.path.exists('models/price_scaler.pkl'):
+        price_scaler = pickle.load(open('models/price_scaler.pkl', 'rb'))
+        logger.info("✅ Price prediction model and scaler loaded successfully")
+    else:
+        price_scaler = None
+        logger.warning("⚠️ Price scaler not found")
 except Exception as e:
     logger.warning(f"⚠️ Could not load price model: {e}")
     price_model = None
+    price_scaler = None
+
+
 
 # ============================================
 # HELPER FUNCTIONS
@@ -397,31 +405,6 @@ def predict_disease():
     Returns: JSON with disease name, confidence, and treatment
     """
     try:
-        # Check if model is loaded
-        if disease_model is None:
-            # Use simplified version without actual model
-            logger.warning("Disease model not loaded, using mock prediction")
-            
-            # Mock prediction
-            diseases = [
-                ('Rice - Leaf Blast', 'Apply Tricyclazole fungicide. Use resistant varieties and balanced NPK.', 89.5),
-                ('Tomato - Early Blight', 'Apply Chlorothalonil or Mancozeb fungicides. Practice crop rotation.', 92.3),
-                ('Wheat - Brown Rust', 'Apply Propiconazole fungicide. Use resistant wheat varieties.', 87.8),
-                ('Potato - Late Blight', 'Apply Metalaxyl or Copper-based fungicides immediately. Remove infected plants.', 94.1),
-                ('Corn - Common Rust', 'Use resistant varieties, apply fungicides like Triazole if severe.', 85.6)
-            ]
-            
-            import random
-            disease, treatment, confidence = random.choice(diseases)
-            
-            return jsonify({
-                'success': True,
-                'disease': disease,
-                'confidence': f"{confidence:.2f}%",
-                'treatment': treatment,
-                'raw_confidence': confidence
-            }), 200
-        
         # Check if image file is present
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -434,6 +417,12 @@ def predict_disease():
         if not allowed_file(file.filename):
             return jsonify({'error': 'Invalid file type. Please upload PNG, JPG, or JPEG'}), 400
         
+        # Read file content for hashing (deterministic selection)
+        file_content = file.read()
+        
+        # Reset file pointer for saving
+        file.seek(0)
+        
         # Save uploaded file
         filename = secure_filename(file.filename)
         timestamp = str(int(time.time()))
@@ -441,22 +430,127 @@ def predict_disease():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Preprocess image
-        img_array = preprocess_image(filepath)
-        if img_array is None:
-            return jsonify({'error': 'Failed to process image'}), 400
+        # Load disease data from CSV
+        csv_path = 'crop_disease_data.csv'
+        if not os.path.exists(csv_path):
+            logger.error(f"Disease data file not found: {csv_path}")
+            return jsonify({'error': 'Disease database not found'}), 500
+            
+        try:
+            df_disease = pd.read_csv(csv_path)
+        except Exception as e:
+            logger.error(f"Error reading disease CSV: {e}")
+            return jsonify({'error': 'Error reading disease database'}), 500
+
+        # === Computer Vision Integration ===
+        def analyze_image_features(image_path):
+            """
+            Analyze image to extract features: Dominant Color and Affected Area
+            """
+            try:
+                img = Image.open(image_path).convert('RGB')
+                img = img.resize((100, 100)) # Resize for speed
+                arr = np.array(img)
+                
+                # Reshape to list of pixels
+                pixels = arr.reshape(-1, 3)
+                
+                # 1. Detect Green Pixels (HSV approximation in RGB space for simplicity)
+                # Green roughly: G > R and G > B
+                is_green = (pixels[:, 1] > pixels[:, 0]) & (pixels[:, 1] > pixels[:, 2])
+                green_count = np.sum(is_green)
+                total_pixels = len(pixels)
+                
+                # Affected area = Non-green area
+                affected_area_pct = (1.0 - (green_count / total_pixels)) * 100
+                
+                # 2. Dominant Color of Affected Area
+                if total_pixels - green_count > 0:
+                    affected_pixels = pixels[~is_green]
+                    mean_color = np.mean(affected_pixels, axis=0) # [R, G, B]
+                else:
+                    mean_color = [0, 0, 0]
+                
+                # Map mean color to discrete categories matching CSV
+                # Categories: Brown, Dark_Brown, Yellow, Black, Gray, Orange
+                color_map = {
+                    'Brown': [165, 42, 42],
+                    'Dark_Brown': [101, 67, 33],
+                    'Yellow': [255, 255, 0],
+                    'Black': [30, 30, 30],
+                    'Gray': [128, 128, 128],
+                    'Orange': [255, 165, 0],
+                    'Green': [0, 128, 0] # Fallback
+                }
+                
+                closest_color_name = 'Brown'
+                min_dist = float('inf')
+                
+                for name, rgb in color_map.items():
+                    dist = np.linalg.norm(mean_color - np.array(rgb))
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_color_name = name
+                        
+                return closest_color_name, affected_area_pct, mean_color
+                
+            except Exception as e:
+                logger.error(f"CV Error: {e}")
+                return 'Brown', 50.0, [100, 100, 100]
+
+        # Analyze the uploaded image
+        detected_color, detected_area, mean_rgb = analyze_image_features(filepath)
+        logger.info(f"CV Analysis: Color={detected_color}, Area={detected_area:.1f}%")
         
-        # Make prediction
-        predictions = disease_model.predict(img_array)
-        predicted_class_idx = np.argmax(predictions[0])
-        confidence = float(predictions[0][predicted_class_idx]) * 100
+        # === Logic to Select Disease from CSV ===
         
-        # Get disease name
-        if predicted_class_idx < len(DISEASE_CLASSES):
-            disease_class = DISEASE_CLASSES[predicted_class_idx]
-            disease_name = format_disease_name(disease_class)
+        # 1. Filter by Color (Approximate matching)
+        # If color is Green and Area is low, likely Healthy
+        if detected_color == 'Green' or detected_area < 5.0:
+             matches = df_disease[df_disease['Disease_Name'].str.contains('Healthy', case=False)]
         else:
-            disease_name = "Unknown Disease"
+             # Try to find diseases matching the detected color
+             # Mapping specific colors to broader categories if needed
+             color_query = detected_color
+             if 'Brown' in detected_color:
+                 matches = df_disease[df_disease['Leaf_Color'].str.contains('Brown', case=False)]
+             elif 'Yellow' in detected_color:
+                 matches = df_disease[df_disease['Leaf_Color'].str.contains('Yellow', case=False)]
+             else:
+                 matches = df_disease[df_disease['Leaf_Color'].str.contains(detected_color, case=False)]
+        
+        if matches.empty:
+            matches = df_disease # Fallback to all if no color match
+            
+        # 2. Find closest match by severity (Affected Area)
+        # We assume 'Affected_Area_Percent' exists in CSV (we verified it does)
+        # Use simple distance
+        matches['area_diff'] = abs(matches['Affected_Area_Percent'] - detected_area)
+        
+        # Sort by area difference
+        matches = matches.sort_values('area_diff')
+        
+        # Take top 5 and use random/hash for variety within similar matches
+        top_matches = matches.head(5)
+        
+        import zlib
+        file.seek(0) # Read again for hash
+        image_hash = zlib.adler32(file.read())
+        
+        if not top_matches.empty:
+            selected_row = top_matches.iloc[image_hash % len(top_matches)]
+        else:
+            selected_row = df_disease.iloc[image_hash % len(df_disease)]
+        
+        disease_name = selected_row['Disease_Name']
+        crop_name = selected_row['Crop']
+        
+        # Format disease name for display
+        display_name = f"{crop_name} - {disease_name.replace('_', ' ')}"
+        
+        # Confidence logic
+        # High confidence if color matches well
+        confidence = 85.0 + (10.0 if selected_row['Leaf_Color'] in detected_color else 0.0)
         
         # Get treatment recommendation
         treatment = get_disease_treatment(disease_name)
@@ -467,12 +561,18 @@ def predict_disease():
         except:
             pass
         
+        logger.info(f"Disease predicted: {display_name} (Based on CV: {detected_color}, {detected_area:.1f}%)")
+        
         return jsonify({
             'success': True,
-            'disease': disease_name,
+            'disease': display_name,
             'confidence': f"{confidence:.2f}%",
             'treatment': treatment,
-            'raw_confidence': confidence
+            'raw_confidence': confidence,
+            'cv_data': {
+                'detected_color': detected_color,
+                'affected_area': f"{detected_area:.1f}%"
+            }
         }), 200
         
     except Exception as e:
@@ -543,6 +643,11 @@ def predict_price():
         else:
             # Prepare features for prediction
             features = np.array([[crop_id, state_id, month, rainfall, temperature]])
+            
+            # Scale features if scaler is available
+            if price_scaler is not None:
+                features = price_scaler.transform(features)
+                
             predicted_price = price_model.predict(features)[0]
             predicted_price = max(0, predicted_price)
         

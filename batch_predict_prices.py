@@ -119,7 +119,7 @@ for idx, row in df.iterrows():
 
 df['market_trend'] = rows
 # --- New: add previous month and month-to-month crop differences using historical data ---
-HIST_PATHS = ['market_price_data.csv', 'market_price_data.csv', 'market_price_prediction.csv']
+HIST_PATHS = ['market_price_data.csv']
 hist_df = None
 for p in HIST_PATHS:
     if os.path.exists(p):

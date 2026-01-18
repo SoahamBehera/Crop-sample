@@ -29,41 +29,48 @@ DISEASE_CLASSES = [
 ]
 
 # Create a simple CNN model
-model = keras.Sequential([
-    layers.Input(shape=(224, 224, 3)),
-    
-    # First block
-    layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D((2, 2)),
-    layers.Dropout(0.25),
-    
-    # Second block
-    layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D((2, 2)),
-    layers.Dropout(0.25),
-    
-    # Third block
-    layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
-    layers.BatchNormalization(),
-    layers.MaxPooling2D((2, 2)),
-    layers.Dropout(0.25),
-    
-    # Flatten and Dense layers
-    layers.Flatten(),
-    layers.Dense(256, activation='relu'),
-    layers.Dropout(0.5),
-    layers.Dense(128, activation='relu'),
-    layers.Dropout(0.5),
-    layers.Dense(len(DISEASE_CLASSES), activation='softmax')
-])
+# Create a Dual-Head CNN model (Classification + Regression)
+inputs = layers.Input(shape=(224, 224, 3))
+
+# Shared Feature Extraction Layers
+x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
+x = layers.BatchNormalization()(x)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Dropout(0.25)(x)
+
+x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+x = layers.BatchNormalization()(x)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Dropout(0.25)(x)
+
+x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(x)
+x = layers.BatchNormalization()(x)
+x = layers.MaxPooling2D((2, 2))(x)
+x = layers.Dropout(0.25)(x)
+
+flatten = layers.Flatten()(x)
+dense_shared = layers.Dense(256, activation='relu')(flatten)
+dense_shared = layers.Dropout(0.5)(dense_shared)
+
+# Head 1: Disease Classification (Multi-class)
+class_branch = layers.Dense(128, activation='relu')(dense_shared)
+class_branch = layers.Dropout(0.5)(class_branch)
+class_output = layers.Dense(len(DISEASE_CLASSES), activation='softmax', name='disease_output')(class_branch)
+
+# Head 2: Severity/Affected Area Regression (Single value)
+reg_branch = layers.Dense(64, activation='relu')(dense_shared)
+reg_branch = layers.Dropout(0.3)(reg_branch)
+# Output scaled 0-1 (representing percentage), or linear
+reg_output = layers.Dense(1, activation='linear', name='severity_output')(reg_branch)
+
+# Define Model
+model = keras.Model(inputs=inputs, outputs=[class_output, reg_output])
 
 # Compile the model
 model.compile(
     optimizer=keras.optimizers.Adam(learning_rate=0.001),
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
+    loss={'disease_output': 'categorical_crossentropy', 'severity_output': 'mse'},
+    metrics={'disease_output': 'accuracy', 'severity_output': 'mae'}
 )
 
 print(f"✅ Model created with {len(DISEASE_CLASSES)} classes")
@@ -73,10 +80,11 @@ model.summary()
 # Train on dummy data to initialize weights
 print("\n🔄 Training model on dummy data for initialization...")
 X_train = np.random.randn(100, 224, 224, 3).astype('float32') / 255.0
-y_train = keras.utils.to_categorical(np.random.randint(0, len(DISEASE_CLASSES), 100), len(DISEASE_CLASSES))
+y_class = keras.utils.to_categorical(np.random.randint(0, len(DISEASE_CLASSES), 100), len(DISEASE_CLASSES))
+y_sev = np.random.uniform(0, 100, 100)  # Severity 0-100
 
 model.fit(
-    X_train, y_train,
+    X_train, {'disease_output': y_class, 'severity_output': y_sev},
     epochs=2,
     batch_size=10,
     verbose=1,

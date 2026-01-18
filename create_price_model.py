@@ -52,8 +52,15 @@ else:
     })
 
 # Prepare features and target
-X = df[['crop_id', 'state_id', 'month', 'rainfall', 'temperature']]
-y = df['price']
+# Prepare features and target
+if 'crop_id' in df.columns:
+    # Use lowercase columns if available (synthetic data)
+    X = df[['crop_id', 'state_id', 'month', 'rainfall', 'temperature']]
+    y = df['price']
+else:
+    # Use CSV columns (real data)
+    X = df[['Crop_ID', 'State_ID', 'Month', 'Rainfall', 'Temperature']]
+    y = df['Price_Per_Quintal']
 
 print(f"✅ Training data prepared: {X.shape[0]} samples, {X.shape[1]} features")
 
