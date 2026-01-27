@@ -359,6 +359,6 @@ To upload your project report:
 
 ---
 
-**© 2025 CultivaSense. All rights reserved. | Built for Indian Agriculture 🇮🇳**
+**© 2026 CultivaSense. All rights reserved. | Built for Indian Agriculture 🇮🇳**
 
 </div>
