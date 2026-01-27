@@ -3039,8 +3039,15 @@ body {
   100% { transform: rotate(360deg); }
 }
 
+@keyframes subtle-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.98); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .loading {
-  animation: spin 1s linear infinite;
+  animation: subtle-pulse 1.5s ease-in-out infinite;
+  cursor: not-allowed;
 }
 
 /* Utility classes */
