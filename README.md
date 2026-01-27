@@ -272,14 +272,6 @@ We welcome contributions to make CultivaSense even better!
 - 🌍 Localization support
 - 📱 Mobile app development
 
-## 👨‍💻 Developer
-
-**Souvik Das**
-- 🌐 Portfolio: [souvik-das.dev](https://souvik-das.dev)
-- 📧 Email: souvik.das@agriculture.ai
-- 💼 LinkedIn: [dasouvik122005](https://linkedin.com/in/dasouvik122005)
-- 🐙 GitHub: [@dasouvik122005](https://github.com/dasouvik122005)
-
 ## 🙏 Acknowledgments
 
 - **Indian Agricultural Research Institute** - Dataset and domain expertise
