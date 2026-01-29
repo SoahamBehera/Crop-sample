@@ -19,38 +19,7 @@ Thank you for your interest in contributing to **CultivaSense**! We're excited t
 
 ## 📜 Code of Conduct
 
-### Our Pledge
-
-We are committed to providing a welcoming and inclusive environment for all contributors, regardless of:
-- Experience level
-- Gender identity and expression
-- Sexual orientation
-- Disability
-- Personal appearance
-- Body size
-- Race or ethnicity
-- Age
-- Religion
-- Nationality
-
-### Our Standards
-
-**Positive behaviors include:**
-- ✅ Using welcoming and inclusive language
-- ✅ Respecting differing viewpoints and experiences
-- ✅ Gracefully accepting constructive criticism
-- ✅ Focusing on what's best for the community
-- ✅ Showing empathy towards other community members
-
-**Unacceptable behaviors include:**
-- ❌ Harassment, trolling, or insulting comments
-- ❌ Personal or political attacks
-- ❌ Publishing others' private information
-- ❌ Any conduct that could be considered inappropriate in a professional setting
-
-### Enforcement
-
-Violations of the Code of Conduct can be reported to **dasouvik122005@gmail.com**. All complaints will be reviewed and investigated promptly and fairly.
+This project and everyone participating in it is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to **dasouvik122005@gmail.com**.
 
 ---
 
