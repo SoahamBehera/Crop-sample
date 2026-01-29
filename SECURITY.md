@@ -24,7 +24,7 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 ### **Reporting Process**
 
 1. **DO NOT** create a public GitHub issue for security vulnerabilities
-2. **Email us directly** at: **cultivasense_test@gmail.com**
+2. **Email us directly** at: **dasouvik122005@gmail.com**
 3. **Include the following information:**
    - Description of the vulnerability
    - Steps to reproduce the issue
