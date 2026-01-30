@@ -346,8 +346,8 @@ To upload your project report:
 
 ---
 
-**📧 Contact:** cultivasense_test@gmail.com  
-**🌐 Website:** www.cultivasense.com
+**📧 Contact:** dasouvik122005@gmail.com
+**🌐 Website:** www.cultivasense.in
 
 ---
 
