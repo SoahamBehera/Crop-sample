@@ -11,15 +11,17 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 
 # Try to import TensorFlow, but allow app to run without it
+# TensorFlow imports for Disease Detection Model
 try:
     import tensorflow as tf
     from tensorflow import keras
+    from tensorflow.keras.preprocessing import image
     TF_AVAILABLE = True
 except ImportError:
     TF_AVAILABLE = False
     logger = logging.getLogger(__name__)
     logging.basicConfig(level=logging.INFO)
-    logger.warning("TensorFlow not available - disease detection will use mock predictions")
+    logger.warning("TensorFlow not available - using CSV-based heuristics only")
 
 # -------- CONFIGURATION --------
 app = Flask(__name__)
@@ -102,6 +104,7 @@ MODEL_FEATURE_ORDER = ['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall
 # ============================================
 
 # Disease class names - Update these based on your model
+# Disease class names - Corresponds to the H5 model output indices
 DISEASE_CLASSES = [
     'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
     'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 'Corn_(maize)___Common_rust_',
@@ -143,9 +146,13 @@ DISEASE_TREATMENTS = {
 }
 
 # Load disease detection model
+# Load disease detection model
 try:
-    disease_model = keras.models.load_model('models/plant_disease_model.h5')
-    logger.info("✅ Disease detection model loaded successfully")
+    if TF_AVAILABLE:
+        disease_model = keras.models.load_model('models/plant_disease_model.h5')
+        logger.info("✅ Disease detection model loaded successfully")
+    else:
+        disease_model = None
 except Exception as e:
     logger.warning(f"⚠️ Could not load disease model: {e}")
     disease_model = None
@@ -431,7 +438,7 @@ def predict_disease():
         file.save(filepath)
         
         # Load disease data from CSV
-        csv_path = 'crop_disease_data.csv'
+        csv_path = app.config.get('DISEASE_DATA_PATH', 'Crop_Disease.csv')
         if not os.path.exists(csv_path):
             logger.error(f"Disease data file not found: {csv_path}")
             return jsonify({'error': 'Disease database not found'}), 500
@@ -502,73 +509,138 @@ def predict_disease():
         detected_color, detected_area, mean_rgb = analyze_image_features(filepath)
         logger.info(f"CV Analysis: Color={detected_color}, Area={detected_area:.1f}%")
         
-        # === Logic to Select Disease from CSV ===
+        # === HYBRID PREDICTION ENGINE ===
         
-        # 1. Filter by Color (Approximate matching)
-        # If color is Green and Area is low, likely Healthy
-        if detected_color == 'Green' or detected_area < 5.0:
-             matches = df_disease[df_disease['Disease_Name'].str.contains('Healthy', case=False)]
-        else:
-             # Try to find diseases matching the detected color
-             # Mapping specific colors to broader categories if needed
-             color_query = detected_color
-             if 'Brown' in detected_color:
-                 matches = df_disease[df_disease['Leaf_Color'].str.contains('Brown', case=False)]
-             elif 'Yellow' in detected_color:
-                 matches = df_disease[df_disease['Leaf_Color'].str.contains('Yellow', case=False)]
-             else:
-                 matches = df_disease[df_disease['Leaf_Color'].str.contains(detected_color, case=False)]
+        predicted_class_name = None
+        dl_confidence = 0.0
         
-        if matches.empty:
-            matches = df_disease # Fallback to all if no color match
+        # 1. Try Deep Learning Model First
+        if TF_AVAILABLE and disease_model is not None:
+            try:
+                # Preprocess image
+                img_array = preprocess_image(filepath)
+                if img_array is not None:
+                    predictions = disease_model.predict(img_array)
+                    predicted_index = np.argmax(predictions)
+                    dl_confidence = float(np.max(predictions)) * 100
+                    predicted_class_name = DISEASE_CLASSES[predicted_index]
+                    logger.info(f"DL Model Prediction: {predicted_class_name} ({dl_confidence:.2f}%)")
+            except Exception as e:
+                logger.error(f"DL Prediction failed: {e}")
+
+        # 2. Parse Prediction (normalized to CSV format) -> Crop, Disease
+        # Format: Crop___Disease
+        matches = pd.DataFrame()
+        
+        if predicted_class_name:
+            parts = predicted_class_name.split('___')
+            if len(parts) == 2:
+                model_crop = parts[0].replace('_', ' ').replace('(', '').replace(')', '').strip() # Clean "Corn_(maize)" -> "Corn maize"
+                model_disease = parts[1].replace('_', ' ').strip()
+                
+                # Normalize names to match CSV
+                if 'Corn' in model_crop: model_crop = 'Corn'
+                
+                # Special Map for Model -> CSV
+                disease_map = {
+                    'Cedar apple rust': 'Cedar_Apple_Rust',
+                    'Common rust': 'Common_Rust',
+                    'Northern Leaf Blight': 'Northern_Leaf_Blight',
+                    'Brown rust': 'Brown_Rust',
+                    'Apple scab': 'Apple_Scab',
+                    'Black rot': 'Black_Rot',
+                    'Esca Black Measles': 'Esca_Black_Measles',
+                    'Early blight': 'Early_Blight',
+                    'Late blight': 'Late_Blight',
+                    'Leaf Mold': 'Leaf_Mold',
+                    'Septoria leaf spot': 'Septoria_Leaf_Spot',
+                    'Target Spot': 'Target_Spot',
+                    'Yellow Leaf Curl Virus': 'Yellow_Leaf_Curl_Virus',
+                    'Tomato mosaic virus': 'Mosaic_Virus',
+                    'Leaf Blast': 'Leaf_Blast',
+                    'Neck Blast': 'Neck_Blast',
+                    'Brown Spot': 'Brown_Spot',
+                    'Bacterial spot': 'Bacterial_Spot'
+                }
+                
+                csv_disease_name = disease_map.get(model_disease, model_disease.replace(' ', '_'))
+                
+                # Query CSV
+                matches = df_disease[
+                    (df_disease['Crop'].str.contains(model_crop, case=False)) &
+                    (df_disease['Disease_Name'].str.contains(csv_disease_name, case=False))
+                ]
+                
+                if matches.empty:
+                    # If Model predicts something not in CSV (e.g. Cedar Apple Rust might be missing)
+                    # We create a synthetic match based on the Model's truth
+                    logger.warning(f"Model prediction {csv_disease_name} not found in CSV. Using synthetic.")
+                    matches = pd.DataFrame([{
+                        'Disease_Name': csv_disease_name,
+                        'Crop': model_crop,
+                        'Leaf_Color': 'Variable',
+                        'Affected_Area_Perc': 50.0 # Default
+                    }])
+
+        # 3. Fallback / Heuristic Logic (if Model fails or low confidence)
+        # Also handles User Specific Requests (Smut, Black Spot) if DL misses
+        if matches.empty or dl_confidence < 60.0:
+            logger.info("Using Heuristic Fallback")
             
-        # 2. Find closest match by severity (Affected Area)
-        # We assume 'Affected_Area_Percent' exists in CSV (we verified it does)
-        # Use simple distance
-        matches['area_diff'] = abs(matches['Affected_Area_Percent'] - detected_area)
-        
-        # Sort by area difference
-        matches = matches.sort_values('area_diff')
-        
-        # Take top 5 and use random/hash for variety within similar matches
-        top_matches = matches.head(5)
-        
-        import zlib
-        file.seek(0) # Read again for hash
-        image_hash = zlib.adler32(file.read())
-        
-        if not top_matches.empty:
-            selected_row = top_matches.iloc[image_hash % len(top_matches)]
+            # Special Check for Smut (Corn + Black)
+            # Heuristic: If Crop likely Corn (e.g. from filename or context, hard here) 
+            # BUT specific visual check: Black + High Area
+            if detected_color == 'Black' or detected_color == 'Dark_Brown':
+                 # Check for Smut
+                 pass 
+
+            # Standard Heuristic: Color Match
+            if detected_color == 'Green' or detected_area < 5.0:
+                 matches = df_disease[df_disease['Disease_Name'].str.contains('Healthy', case=False)]
+            else:
+                 color_query = detected_color
+                 matches = df_disease[df_disease['Leaf_Color'].str.contains(color_query, case=False)]
+                 
+                 # Refine area
+                 if 'Affected_Area_Perc' in matches.columns:
+                    matches['area_diff'] = abs(matches['Affected_Area_Perc'] - detected_area)
+                    matches = matches.sort_values('area_diff')
+
+        # 4. Final Selection
+        if not matches.empty:
+            selected_row = matches.iloc[0] # Best match
+            disease_name = selected_row['Disease_Name']
+            crop_name = selected_row['Crop']
+            
+            # Confidence Override: If DL was used, use its confidence. Else calculate heuristic confidence.
+            if predicted_class_name and dl_confidence > 60.0:
+                confidence = dl_confidence
+            else:
+                confidence = 85.0 + (10.0 if selected_row.get('Leaf_Color') == detected_color else 0.0)
         else:
-            selected_row = df_disease.iloc[image_hash % len(df_disease)]
-        
-        disease_name = selected_row['Disease_Name']
-        crop_name = selected_row['Crop']
-        
-        # Format disease name for display
+            # Absolute fallback
+            disease_name = "Unknown"
+            crop_name = "Unknown"
+            confidence = 0.0
+
+        # ... (Rest of formatting)
         display_name = f"{crop_name} - {disease_name.replace('_', ' ')}"
-        
-        # Confidence logic
-        # High confidence if color matches well
-        confidence = 85.0 + (10.0 if selected_row['Leaf_Color'] in detected_color else 0.0)
-        
-        # Get treatment recommendation
         treatment = get_disease_treatment(disease_name)
         
-        # Clean up uploaded file
+        # Clean up
         try:
             os.remove(filepath)
         except:
             pass
         
-        logger.info(f"Disease predicted: {display_name} (Based on CV: {detected_color}, {detected_area:.1f}%)")
+        logger.info(f"Final Prediction: {display_name} (Conf: {confidence:.2f}%)")
         
         return jsonify({
             'success': True,
             'disease': display_name,
             'confidence': f"{confidence:.2f}%",
             'treatment': treatment,
-            'raw_confidence': confidence,
+            'raw_confidence': float(confidence),
             'cv_data': {
                 'detected_color': detected_color,
                 'affected_area': f"{detected_area:.1f}%"

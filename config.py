@@ -30,7 +30,7 @@ class Config:
     CSV_PATH = os.environ.get('CSV_PATH', 'Crop_recommendation.csv')
     
     # Data paths
-    DISEASE_DATA_PATH = os.environ.get('DISEASE_DATA_PATH', 'crop_disease_data.csv')
+    DISEASE_DATA_PATH = os.environ.get('DISEASE_DATA_PATH', 'Crop_Disease.csv')
     PRICE_DATA_PATH = os.environ.get('PRICE_DATA_PATH', 'market_price_data.csv')
     
     # Logging Configuration
