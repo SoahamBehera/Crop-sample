@@ -319,7 +319,6 @@ To upload your project report:
 
 [📂 View Project Report Folder](project_report/)
 
-
 ---
 
 ## 📈 Statistics
