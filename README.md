@@ -124,18 +124,19 @@
 
 ## 📁 Project Structure
 
-```
 Cultiva-Sense/
 │
 ├── 📄 app.py                          # Main Flask application with all routes
 ├── 📄 config.py                       # Configuration management
 ├── 📄 setup.py                        # Project setup script
+├── 📄 requirements.txt              # Python dependencies
+├── 📄 .env.example                  # Environment variables template
 │
 ├── 📊 Models & Data
 │   ├── model.pkl                      # Trained crop recommendation model
 │   ├── minmaxscaler.pkl              # Feature scaling model
-│   ├── Crop_recommendation.csv       # Training dataset (2200+ samples)
-│   ├── crop_disease_data.csv         # Disease detection database
+│   ├── Crop_recommendation.csv       # Training dataset
+│   ├── Crop_Disease.csv              # Disease detection database
 │   ├── market_price_data.csv         # Market price historical data
 │   └── models/
 │       ├── plant_disease_model.h5    # CNN model for disease detection (optional)
@@ -145,27 +146,24 @@ Cultiva-Sense/
 │       └── price_model_info.json     # Price model metadata
 │
 ├── 📁 static/
-│   ├── 🎨 style.css                  # Modern responsive styling (70KB+)
-│   ├── ⚡ script.js                   # Interactive functionality (42KB+)
+│   ├── 🎨 style.css                  # Modern responsive styling
+│   ├── ⚡ script.js                   # Interactive functionality
 │   └── 🖼️ logo.png                   # Brand logo
 │
 ├── 📁 templates/
-│   └── 🌐 index.html                 # Main web interface (all features)
+│   └── 🌐 index.html                 # Main web interface
 │
 ├── 📁 uploads/                        # Temporary storage for uploaded images
 │
-├── 🔧 Configuration
-│   ├── .env.example                  # Environment variables template
-│   ├── .gitignore                    # Git ignore rules
-│   └── requirements.txt              # Python dependencies
-│
-├── �️ Utilities
+├── 🛠️ Utilities
 │   ├── generate_disease_data.py      # Generate disease dataset
 │   ├── generate_market_price_data.py # Generate price dataset
-│   └── batch_predict_prices.py       # Batch price predictions
 │
 ├── 📓 Crop Classification...ipynb     # Jupyter notebook for model training
-└── �📄 README.md                       # Project documentation
+├── 📄 CONTRIBUTING.md                 # Contribution guidelines
+├── 📄 CODE_OF_CONDUCT.md              # Code of conduct
+├── 📄 SECURITY.md                     # Security policy
+└── 📄 README.md                       # Project documentation
 ```
 
 ## 🛠️ Technology Stack
@@ -257,6 +255,8 @@ CultivaSense is designed with a **mobile-first approach**:
 
 We welcome contributions to make CultivaSense even better!
 
+Please read our [Contribution Guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+
 ### **How to Contribute:**
 
 1. **Fork the repository**
@@ -271,6 +271,11 @@ We welcome contributions to make CultivaSense even better!
 - 🎨 UI/UX enhancements
 - 🌍 Localization support
 - 📱 Mobile app development
+
+## 🔐 Security
+
+For security concerns, please review our [Security Policy](SECURITY.md).
+
 
 ## 🙏 Acknowledgments
 
